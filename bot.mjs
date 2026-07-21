@@ -1,5 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
+import { resolve } from "node:path";
+import { broadcast } from "./src/broadcast.mjs";
+import { SubscriberStore } from "./src/subscriber-store.mjs";
 
 const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
 
@@ -13,6 +16,10 @@ const startedAt = Date.now();
 const setupOnly = process.argv.includes("--setup");
 const relayChatId = process.env.TELEGRAM_CHAT_ID?.trim();
 const relaySecret = process.env.TELEGRAM_RELAY_SECRET?.trim();
+const subscribersFile = resolve(
+  process.env.TELEGRAM_SUBSCRIBERS_FILE?.trim() || "data/subscribers.json"
+);
+const subscribers = new SubscriberStore(subscribersFile);
 const configuredPort = Number(process.env.PORT || 3000);
 const relayPort =
   Number.isInteger(configuredPort) && configuredPort > 0
@@ -113,7 +120,7 @@ async function handleRelayRequest(request, response) {
     return;
   }
 
-  if (!relayChatId || !relaySecret) {
+  if (!relaySecret) {
     sendJson(response, 503, { ok: false, error: "Relay is not configured" });
     return;
   }
@@ -146,19 +153,42 @@ async function handleRelayRequest(request, response) {
     return;
   }
 
-  try {
-    await telegram("sendMessage", {
-      chat_id: relayChatId,
-      text,
-      disable_notification: payload.silent === true,
-      link_preview_options: { is_disabled: true }
+  const recipients = subscribers.values();
+  if (relayChatId) recipients.push(relayChatId);
+
+  if (recipients.length === 0) {
+    sendJson(response, 503, { ok: false, error: "No Telegram subscribers" });
+    return;
+  }
+
+  const { delivered, failures } = await broadcast(
+    recipients,
+    (chatId) =>
+      telegram("sendMessage", {
+        chat_id: chatId,
+        text,
+        disable_notification: payload.silent === true,
+        link_preview_options: { is_disabled: true }
+      })
+  );
+
+  for (const { reason, chatId } of failures) {
+    console.error(
+      `Не удалось отправить заказ в Telegram-чат ${chatId}:`,
+      reason instanceof Error ? reason.message : reason
+    );
+  }
+
+  if (delivered > 0) {
+    sendJson(response, 200, {
+      ok: true,
+      delivered,
+      failed: failures.length
     });
-    sendJson(response, 200, { ok: true });
-  } catch (error) {
-    console.error("Не удалось отправить заказ в Telegram:", error.message);
+  } else {
     sendJson(response, 502, {
       ok: false,
-      error: error instanceof Error ? error.message : "Telegram delivery failed"
+      error: "Telegram delivery failed for all subscribers"
     });
   }
 }
@@ -187,9 +217,12 @@ async function handleMessage(message) {
   const command = text.split(/\s+/, 1)[0].toLowerCase().split("@", 1)[0];
 
   if (command === "/start") {
+    const added = await subscribers.add(message.chat.id);
     await sendMessage(
       message.chat.id,
-      "Бот запущен и работает. Используйте кнопку «Статус», чтобы проверить его состояние."
+      added
+        ? "Бот запущен. Теперь вы будете получать уведомления о новых заказах. Используйте кнопку «Статус», чтобы проверить его состояние."
+        : "Бот запущен и работает. Уведомления о новых заказах включены. Используйте кнопку «Статус», чтобы проверить его состояние."
     );
     return;
   }
@@ -263,6 +296,7 @@ process.once("SIGINT", stop);
 process.once("SIGTERM", stop);
 
 try {
+  await subscribers.load();
   await configureMenu();
   const bot = await telegram("getMe");
   if (setupOnly) {

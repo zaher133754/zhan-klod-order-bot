@@ -48,7 +48,14 @@ node --env-file="C:\Users\admin\Desktop\zhanklod\.env.local" bot.mjs
 TELEGRAM_BOT_TOKEN=токен_от_BotFather
 TELEGRAM_CHAT_ID=id_чата_или_группы
 TELEGRAM_RELAY_SECRET=длинный_случайный_ключ
+TELEGRAM_SUBSCRIBERS_FILE=/постоянный/путь/subscribers.json
 ```
+
+`TELEGRAM_CHAT_ID` теперь необязателен и остаётся резервным получателем для
+совместимости. Каждый пользователь, отправивший боту `/start`, автоматически
+добавляется в рассылку заказов. Список хранится в `data/subscribers.json` либо
+по пути из `TELEGRAM_SUBSCRIBERS_FILE`. На хостинге укажите путь на постоянном
+диске, чтобы подписчики не потерялись при повторном развёртывании приложения.
 
 После публикации проверьте адрес:
 

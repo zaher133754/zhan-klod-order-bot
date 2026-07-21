@@ -7,7 +7,8 @@
     "start:local": "set HTTPS_PROXY=http://127.0.0.1:10808&& set HTTP_PROXY=http://127.0.0.1:10808&& node --use-env-proxy --env-file=../../zhanklod/.env.local bot.mjs",
     "setup": "set HTTPS_PROXY=http://127.0.0.1:10808&& set HTTP_PROXY=http://127.0.0.1:10808&& node --use-env-proxy --env-file=../../zhanklod/.env.local bot.mjs --setup",
     "delete-webhook": "set HTTPS_PROXY=http://127.0.0.1:10808&& set HTTP_PROXY=http://127.0.0.1:10808&& node --use-env-proxy --env-file=../../zhanklod/.env.local delete-webhook.mjs",
-    "check": "node --check bot.mjs"
+    "check": "node --check bot.mjs && node --test",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"
